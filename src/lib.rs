@@ -4,7 +4,7 @@ use crate::proc_macro::TokenStream;
 use quote::quote;
 use syn;
 
-#[proc_macro_derive(WireMessage, attributes(msg_type))]
+#[proc_macro_derive(WireMessage, attributes(msg_type, tlv_type))]
 pub fn wire_message_derive(input: TokenStream) -> TokenStream {
     // Construct a representation of Rust code as a syntax tree
     // that we can manipulate
@@ -37,40 +37,79 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     let iter = syn::Ident::new(&format!("{}Iter", name), proc_macro2::Span::call_site());
     let counter = std::iter::successors(Some(0), |a| Some(a + 1))
         .map(|i| proc_macro2::Literal::usize_suffixed(i));
-    let field_mapper = |(i, f): (usize, &syn::Field)| -> syn::Member {
-        f.ident
-            .as_ref()
-            .map(|id| syn::Member::Named(id.clone()))
-            .unwrap_or_else(|| {
-                syn::Member::Unnamed(syn::Index {
-                    index: i as u32,
-                    span: proc_macro2::Span::call_site(),
+    let mut tlv = None;
+    let mut new_tlv = None;
+    let field_mapper = |(i, f): (usize, &syn::Field)| -> (syn::Member, Option<syn::Lit>) {
+        let res = (
+            f.ident
+                .as_ref()
+                .map(|id| syn::Member::Named(id.clone()))
+                .unwrap_or_else(|| {
+                    syn::Member::Unnamed(syn::Index {
+                        index: i as u32,
+                        span: proc_macro2::Span::call_site(),
+                    })
+                }),
+            f.attrs
+                .iter()
+                .filter_map(|a| match a.parse_meta() {
+                    Ok(m) => match m {
+                        syn::Meta::NameValue(nv) => {
+                            if nv.path.is_ident("tlv_type") {
+                                if let syn::Lit::Int(ref lit) = nv.lit {
+                                    new_tlv = Some(
+                                        lit.base10_parse::<u64>().expect("tlv_type must be a u64"),
+                                    );
+                                    Some(nv.lit)
+                                } else {
+                                    panic!("tlv_type must be a u64")
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    },
+                    Err(_) => None,
                 })
-            })
+                .next(),
+        );
+        match (tlv, new_tlv) {
+            (Some(_), None) => panic!("tlv stream must occur after expected fields"),
+            (Some(old), Some(new)) if old > new => {
+                panic!("tlv stream must be monotonically increasing by type")
+            }
+            _ => (),
+        };
+        tlv = new_tlv;
+        res
     };
     let punc = syn::punctuated::Punctuated::<syn::Field, ()>::new();
-    let fields = match &ast.data {
+    let (field, tlv_type): (Vec<syn::Member>, Vec<Option<syn::Lit>>) = match &ast.data {
         syn::Data::Struct(d) => match &d.fields {
-            syn::Fields::Named(n) => n.named.iter().enumerate().map(field_mapper),
-            syn::Fields::Unnamed(n) => n.unnamed.iter().enumerate().map(field_mapper),
-            syn::Fields::Unit => punc.iter().enumerate().map(field_mapper),
+            syn::Fields::Named(n) => n.named.iter(),
+            syn::Fields::Unnamed(n) => n.unnamed.iter(),
+            syn::Fields::Unit => punc.iter(),
         },
         _ => unimplemented!(),
-    };
+    }
+    .enumerate()
+    .map(field_mapper)
+    .unzip();
     let gen = quote! {
         pub struct #iter<'a> {
             idx: usize,
             parent: &'a #name,
         }
         impl<'a> Iterator for #iter<'a> {
-            type Item = &'a dyn WireItemBoxedWriter;
+            type Item = (&'a dyn WireItemBoxedWriter, Option<u64>);
 
             fn next(&mut self) -> Option<Self::Item> {
                 let n = self.idx;
                 self.idx += 1;
                 match n {
                     #(
-                        #counter => Some(&self.parent.#fields),
+                        #counter => Some((&self.parent.#field, #tlv_type)),
                     )*
                     _ => None
                 }
