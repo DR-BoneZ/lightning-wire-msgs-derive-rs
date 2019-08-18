@@ -62,7 +62,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
             idx: usize,
             parent: &'a #name,
         }
-        impl<'a> Iterator for #iter {
+        impl<'a> Iterator for #iter<'a> {
             type Item = &'a dyn WireItemBoxedWriter;
 
             fn next(&mut self) -> Option<Self::Item> {
