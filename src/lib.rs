@@ -86,7 +86,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         res
     };
     let punc = syn::punctuated::Punctuated::<syn::Field, ()>::new();
-    let (field, tlv_type_vec): (Vec<syn::Member>, Vec<Option<syn::Lit>>) = match &ast.data {
+    let (field, tlv_type): (Vec<syn::Member>, Vec<Option<syn::Lit>>) = match &ast.data {
         syn::Data::Struct(d) => match &d.fields {
             syn::Fields::Named(n) => n.named.iter(),
             syn::Fields::Unnamed(n) => n.unnamed.iter(),
@@ -97,70 +97,20 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     .enumerate()
     .map(field_mapper)
     .unzip();
-    let tlv_type = tlv_type_vec.into_iter().map(|opt| match opt {
-        Some(t) => syn::Expr::Call(syn::ExprCall {
-            attrs: Vec::new(),
-            func: Box::new(
-                syn::ExprPath {
-                    attrs: Vec::new(),
-                    qself: None,
-                    path: syn::Path {
-                        leading_colon: None,
-                        segments: {
-                            let mut seq = syn::punctuated::Punctuated::new();
-                            seq.push(syn::PathSegment {
-                                ident: syn::Ident::new("Some", Span::call_site()),
-                                arguments: syn::PathArguments::None,
-                            });
-                            seq
-                        },
-                    },
-                }
-                .into(),
-            ),
-            paren_token: syn::token::Paren {
-                span: Span::call_site(),
-            },
-            args: {
-                let mut seq = syn::punctuated::Punctuated::new();
-                seq.push(syn::Expr::Lit(syn::ExprLit {
-                    attrs: Vec::new(),
-                    lit: t,
-                }));
-                seq
-            },
-        }),
-        None => syn::ExprPath {
-            attrs: Vec::new(),
-            qself: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments: {
-                    let mut seq = syn::punctuated::Punctuated::new();
-                    seq.push(syn::PathSegment {
-                        ident: syn::Ident::new("None", Span::call_site()),
-                        arguments: syn::PathArguments::None,
-                    });
-                    seq
-                },
-            },
-        }
-        .into(),
-    });
     let gen = quote! {
         pub struct #iter<'a> {
             idx: usize,
             parent: &'a #name,
         }
         impl<'a> Iterator for #iter<'a> {
-            type Item = (&'a dyn WireItemBoxedWriter, Option<u64>);
+            type Item = EncodedItem<&'a dyn WireItemBoxedWriter>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 let n = self.idx;
                 self.idx += 1;
                 match n {
                     #(
-                        #counter => Some((&self.parent.#field, #tlv_type)),
+                        #counter => Some((&self.parent.#field, #tlv_type).into()),
                     )*
                     _ => None
                 }
@@ -168,7 +118,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         }
 
         impl<'a> IntoIterator for &'a #name {
-            type Item = (&'a dyn WireItemBoxedWriter, Option<u64>);
+            type Item = #iter::Item;
             type IntoIter = #iter<'a>;
             fn into_iter(self) -> #iter<'a> {
                 #iter {
