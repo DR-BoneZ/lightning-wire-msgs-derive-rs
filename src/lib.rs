@@ -33,7 +33,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
             Err(_) => None,
         })
         .next()
-        .expect("missing attribute \"type\"\n\nhelp: add #[msg_type = ...]");
+        .expect("missing attribute \"msg_type\"\n\nhelp: add #[msg_type = ...]");
     let iter = syn::Ident::new(&format!("{}Iter", name), proc_macro2::Span::call_site());
     let counter = std::iter::successors(Some(0), |a| Some(a + 1))
         .map(|i| proc_macro2::Literal::usize_suffixed(i));
@@ -70,7 +70,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
                 self.idx += 1;
                 match n {
                     #(
-                        #counter => Some(&self.#fields),
+                        #counter => Some(&self.parent.#fields),
                     )*
                     _ => None
                 }
@@ -87,7 +87,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
                 }
             }
         }
-        impl<'a> WireMessage<'a> for #name {
+        impl WireMessage for #name {
             fn msg_type(&self) -> u16 {
                 #num
             }
