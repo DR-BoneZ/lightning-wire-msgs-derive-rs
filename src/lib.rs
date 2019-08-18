@@ -87,7 +87,10 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
                 }
             }
         }
-        impl WireMessage<'_> for #name {
+        impl<'a> WireMessage<'a> for #name
+        where
+            Self: 'a
+        {
             fn msg_type(&self) -> u16 {
                 #num
             }
