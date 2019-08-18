@@ -39,8 +39,8 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     let counter = std::iter::successors(Some(0), |a| Some(a + 1))
         .map(|i| proc_macro2::Literal::usize_suffixed(i));
     let mut tlv = None;
-    let mut new_tlv = None;
     let field_mapper = |(i, f): (usize, &syn::Field)| -> (syn::Member, Option<syn::Lit>) {
+        let mut new_tlv = None;
         let res = (
             f.ident
                 .as_ref()
