@@ -1,6 +1,7 @@
 extern crate proc_macro;
 
 use crate::proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
 use syn;
 
@@ -34,7 +35,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         })
         .next()
         .expect("missing attribute \"msg_type\"\n\nhelp: add #[msg_type = ...]");
-    let iter = syn::Ident::new(&format!("{}Iter", name), proc_macro2::Span::call_site());
+    let iter = syn::Ident::new(&format!("{}Iter", name), Span::call_site());
     let counter = std::iter::successors(Some(0), |a| Some(a + 1))
         .map(|i| proc_macro2::Literal::usize_suffixed(i));
     let mut tlv = None;
@@ -47,7 +48,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
                 .unwrap_or_else(|| {
                     syn::Member::Unnamed(syn::Index {
                         index: i as u32,
-                        span: proc_macro2::Span::call_site(),
+                        span: Span::call_site(),
                     })
                 }),
             f.attrs
@@ -85,7 +86,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         res
     };
     let punc = syn::punctuated::Punctuated::<syn::Field, ()>::new();
-    let (field, tlv_type): (Vec<syn::Member>, Vec<Option<syn::Lit>>) = match &ast.data {
+    let (field, tlv_type_vec): (Vec<syn::Member>, Vec<Option<syn::Lit>>) = match &ast.data {
         syn::Data::Struct(d) => match &d.fields {
             syn::Fields::Named(n) => n.named.iter(),
             syn::Fields::Unnamed(n) => n.unnamed.iter(),
@@ -96,6 +97,56 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     .enumerate()
     .map(field_mapper)
     .unzip();
+    let tlv_type = tlv_type_vec.into_iter().map(|opt| match opt {
+        Some(t) => syn::Expr::Call(syn::ExprCall {
+            attrs: Vec::new(),
+            func: Box::new(
+                syn::ExprPath {
+                    attrs: Vec::new(),
+                    qself: None,
+                    path: syn::Path {
+                        leading_colon: None,
+                        segments: {
+                            let mut seq = syn::punctuated::Punctuated::new();
+                            seq.push(syn::PathSegment {
+                                ident: syn::Ident::new("Some", Span::call_site()),
+                                arguments: syn::PathArguments::None,
+                            });
+                            seq
+                        },
+                    },
+                }
+                .into(),
+            ),
+            paren_token: syn::token::Paren {
+                span: Span::call_site(),
+            },
+            args: {
+                let mut seq = syn::punctuated::Punctuated::new();
+                seq.push(syn::Expr::Lit(syn::ExprLit {
+                    attrs: Vec::new(),
+                    lit: t,
+                }));
+                seq
+            },
+        }),
+        None => syn::ExprPath {
+            attrs: Vec::new(),
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: {
+                    let mut seq = syn::punctuated::Punctuated::new();
+                    seq.push(syn::PathSegment {
+                        ident: syn::Ident::new("None", Span::call_site()),
+                        arguments: syn::PathArguments::None,
+                    });
+                    seq
+                },
+            },
+        }
+        .into(),
+    });
     let gen = quote! {
         pub struct #iter<'a> {
             idx: usize,
