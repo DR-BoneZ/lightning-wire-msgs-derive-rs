@@ -117,7 +117,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         }
 
         impl<'a> IntoIterator for &'a #name {
-            type Item = &'a dyn WireItemBoxedWriter;
+            type Item = (&'a dyn WireItemBoxedWriter, Option<u64>);
             type IntoIter = #iter<'a>;
             fn into_iter(self) -> #iter<'a> {
                 #iter {
