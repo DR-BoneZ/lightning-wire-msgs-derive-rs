@@ -4,7 +4,7 @@ use crate::proc_macro::TokenStream;
 use quote::quote;
 use syn;
 
-#[proc_macro_derive(WireMessage)]
+#[proc_macro_derive(WireMessage, attributes(msg_type))]
 pub fn wire_message_derive(input: TokenStream) -> TokenStream {
     // Construct a representation of Rust code as a syntax tree
     // that we can manipulate
