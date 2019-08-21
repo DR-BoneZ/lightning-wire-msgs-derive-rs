@@ -6,6 +6,16 @@ use quote::quote;
 use std::collections::HashSet;
 use syn;
 
+#[proc_macro_derive(AnyWireMessage)]
+pub fn any_wire_message_derive(input: TokenStream) -> TokenStream {
+    // Construct a representation of Rust code as a syntax tree
+    // that we can manipulate
+    let ast = syn::parse(input).unwrap();
+
+    // Build the trait implementation
+    impl_any_wire_message(&ast)
+}
+
 #[proc_macro_derive(WireMessage, attributes(msg_type, tlv_type))]
 pub fn wire_message_derive(input: TokenStream) -> TokenStream {
     // Construct a representation of Rust code as a syntax tree
@@ -16,10 +26,69 @@ pub fn wire_message_derive(input: TokenStream) -> TokenStream {
     impl_wire_message(&ast)
 }
 
+fn impl_any_wire_message(ast: &syn::DeriveInput) -> TokenStream {
+    use syn::Data::*;
+    match &ast.data {
+        Enum(ref s) => impl_any_wire_message_enum(&ast.ident, s),
+        _ => panic!("only derivable for enums"),
+    }
+}
+
+fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> TokenStream {
+    let (variant_name, variant_type): (Vec<_>, Vec<_>) = enum_data
+        .variants
+        .iter()
+        .map(|v| {
+            (
+                &v.ident,
+                match &v.fields {
+                    syn::Fields::Unnamed(f) => {
+                        &f.unnamed
+                            .first()
+                            .expect("all variants must contain a value")
+                            .ty
+                    }
+                    _ => panic!("all variants must be tuples"),
+                },
+            )
+        })
+        .unzip();
+    let gen = quote! {
+        impl<'a> AnyWireMessage<'a> for #name {
+            fn msg_type(&self) -> u16 {
+                match self {
+                    #(
+                        #variant_name(a) => #variant_type::MSG_TYPE,
+                    )*
+                }
+            }
+
+            fn write_to<W: std::io::Write>(&'a self, w: &mut W) -> std::io::Result<usize> {
+                match self {
+                    #(
+                        #variant_name(a) => a.write_to(w),
+                    )*
+                }
+            }
+        }
+    };
+    gen.into()
+}
+
 fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
-    let name = &ast.ident;
-    let num = ast
-        .attrs
+    use syn::Data::*;
+    match &ast.data {
+        Struct(ref s) => impl_wire_message_struct(&ast.ident, &ast.attrs, s),
+        _ => unimplemented!(),
+    }
+}
+
+fn impl_wire_message_struct(
+    name: &syn::Ident,
+    attrs: &Vec<syn::Attribute>,
+    struct_data: &syn::DataStruct,
+) -> TokenStream {
+    let num = attrs
         .iter()
         .filter_map(|a| match a.parse_meta() {
             Ok(m) => match m {
@@ -110,13 +179,10 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
         };
     let punc = syn::punctuated::Punctuated::<syn::Field, ()>::new();
     let (field_tup, tlv_type): (Vec<(syn::Member, syn::Type)>, Vec<Option<syn::Lit>>) =
-        match &ast.data {
-            syn::Data::Struct(d) => match &d.fields {
-                syn::Fields::Named(n) => n.named.iter(),
-                syn::Fields::Unnamed(n) => n.unnamed.iter(),
-                syn::Fields::Unit => punc.iter(),
-            },
-            _ => unimplemented!(),
+        match &struct_data.fields {
+            syn::Fields::Named(n) => n.named.iter(),
+            syn::Fields::Unnamed(n) => n.unnamed.iter(),
+            syn::Fields::Unit => punc.iter(),
         }
         .enumerate()
         .map(field_mapper)
