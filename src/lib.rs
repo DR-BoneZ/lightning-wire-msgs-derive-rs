@@ -56,6 +56,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
     let gen = quote! {
         impl<'a> AnyWireMessage<'a> for #name {
             fn msg_type(&self) -> u16 {
+                use #name::*;
                 match self {
                     #(
                         #variant_name(a) => #variant_type::MSG_TYPE,
@@ -64,6 +65,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
             }
 
             fn write_to<W: std::io::Write>(&'a self, w: &mut W) -> std::io::Result<usize> {
+                use #name::*;
                 match self {
                     #(
                         #variant_name(a) => a.write_to(w),
