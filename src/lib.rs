@@ -68,7 +68,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
                 use #name::*;
                 match self {
                     #(
-                        #variant_name(a) => a.write_to(w),
+                        #variant_name(a) => WireMessage::write_to(a, w),
                     )*
                 }
             }
