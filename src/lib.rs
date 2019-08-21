@@ -103,14 +103,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
                     }
                     _ => panic!("tlv value must be Option"),
                 },
-                (_, None) => match &f.ty {
-                    syn::Type::Path(ref p)
-                        if p.path.segments.last().expect("missing type").ident == "Option" =>
-                    {
-                        panic!("Option fields must be tlv")
-                    }
-                    _ => (),
-                },
+                _ => (),
             };
             tlv = new_tlv;
             res
