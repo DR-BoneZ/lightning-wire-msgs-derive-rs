@@ -201,9 +201,7 @@ fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
             impl<'a> WireMessage<'a> for #name {
                 type Item = #item<'a>;
 
-                fn msg_type(&self) -> u16 {
-                    #num
-                }
+                const MSG_TYPE: u16 = #num;
             }
         }
     };
