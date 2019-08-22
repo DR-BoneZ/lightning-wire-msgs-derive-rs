@@ -282,10 +282,10 @@ fn impl_wire_message_struct(
 
                 fn read_from<R: std::io::Read>(reader: &mut R, check_type: bool) -> std::io::Result<Self> {
                     if check_type {
-                        let mut type = [0u8; 2];
-                        reader.read_exact(&mut type)?;
-                        let type = u16::from_be_bytes(type);
-                        if type != Self::MSG_TYPE {
+                        let mut msg_type = [0u8; 2];
+                        reader.read_exact(&mut msg_type)?;
+                        let msg_type = u16::from_be_bytes(msg_type);
+                        if msg_type != Self::MSG_TYPE {
                             return Err(std::io::Error::from(std::io::ErrorKind::InvalidData));
                         }
                     }
