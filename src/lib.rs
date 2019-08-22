@@ -54,7 +54,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
         })
         .unzip();
     let gen = quote! {
-        impl<'a> AnyWireMessage<'a> for #name {
+        impl<'a> lightning_wire_msgs::AnyWireMessage<'a> for #name {
             fn msg_type(&self) -> u16 {
                 match self {
                     #(
@@ -66,7 +66,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
             fn write_to<W: std::io::Write>(&'a self, w: &mut W) -> std::io::Result<usize> {
                 match self {
                     #(
-                        #name::#variant_name(a) => WireMessage::write_to(a, w),
+                        #name::#variant_name(a) => lightning_wire_msgs::WireMessage::write_to(a, w),
                     )*
                 }
             }
@@ -187,6 +187,17 @@ fn impl_wire_message_struct(
         .enumerate()
         .map(field_mapper)
         .unzip();
+    let wire_item_read_expr: Vec<_> = tlv_type.iter().map(|t| {
+        if let Some(t) = t {
+            quote! {
+                lightning_wire_msgs::WireItem::read_from(&mut peek_reader, Some(#t))?
+            }
+        } else {
+            quote! {
+                lightning_wire_msgs::WireItem::read_from(&mut peek_reader, None)?.ok_or(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?
+            }
+        }
+    }).collect();
     let (field, field_ty_set): (Vec<syn::Member>, HashSet<syn::Type>) =
         field_tup.into_iter().unzip();
     let field_ty = field_ty_set.iter();
@@ -204,7 +215,7 @@ fn impl_wire_message_struct(
                     std::iter::empty()
                 }
             }
-            impl WireMessage<'_> for #name {
+            impl lightning_wire_msgs::WireMessage<'_> for #name {
                 fn msg_type(&self) -> u16 {
                     #num
                 }
@@ -224,7 +235,7 @@ fn impl_wire_message_struct(
                     }
                 }
             )*
-            impl<'a> WireItem for #item<'a> {
+            impl<'a> lightning_wire_msgs::WireItem for #item<'a> {
                 fn encode<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<usize> {
                     use #item::*;
                     match self {
@@ -240,14 +251,14 @@ fn impl_wire_message_struct(
                 parent: &'a #name,
             }
             impl<'a> Iterator for #iter<'a> {
-                type Item = EncodedItem<#item<'a>>;
+                type Item = lightning_wire_msgs::EncodedItem<#item<'a>>;
 
                 fn next(&mut self) -> Option<Self::Item> {
                     let n = self.idx;
                     self.idx += 1;
                     match n {
                         #(
-                            #counter => Some(EncodedItem::from((&self.parent.#field, #tlv_type))),
+                            #counter => Some(lightning_wire_msgs::EncodedItem::from((&self.parent.#field, #tlv_type))),
                         )*
                         _ => None
                     }
@@ -264,10 +275,28 @@ fn impl_wire_message_struct(
                     }
                 }
             }
-            impl<'a> WireMessage<'a> for #name {
+            impl<'a> lightning_wire_msgs::WireMessage<'a> for #name {
                 type Item = #item<'a>;
 
                 const MSG_TYPE: u16 = #num;
+
+                fn read_from<R: std::io::Read>(reader: &mut R, check_type: bool) -> std::io::Result<Self> {
+                    if check_type {
+                        let mut type = [0u8; 2];
+                        reader.read_exact(&mut type)?;
+                        let type = u16::from_be_bytes(type);
+                        if type != Self::MSG_TYPE {
+                            return Err(std::io::Error::from(std::io::ErrorKind::InvalidData));
+                        }
+                    }
+                    let mut peek_reader = lightning_wire_msgs::PeekReader::from(reader);
+
+                    Ok(#name {
+                        #(
+                            #field: #wire_item_read_expr,
+                        )*
+                    })
+                }
             }
         }
     };
