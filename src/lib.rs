@@ -252,7 +252,7 @@ fn impl_wire_message_struct(
                 fn encode<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<usize> {
                     match self {
                         #(
-                            #item::#field_ty_name3(a) => <a as lightning_wire_msgs::WireItem>.encode(w),
+                            #item::#field_ty_name3(a) => <a as lightning_wire_msgs::WireItem>::encode(a, w),
                         )*
                     }
                 }
