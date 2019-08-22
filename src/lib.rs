@@ -70,6 +70,18 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
                     )*
                 }
             }
+
+            fn read_from<R: std::io::Read>(r: &mut R) -> std::io::Result<Self> {
+                let mut msg_type = [0_u8; 2];
+                r.read_exact(&mut msg_type)?;
+                let msg_type = u16::from_be_bytes(msg_type);
+                Ok(match msg_type {
+                    #(
+                        #variant_type::MSG_TYPE => #name::#variant_name(#variant_type::read_from(r, false)?),
+                    )*
+                    _ => return Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
+                })
+            }
         }
     };
     gen.into()
