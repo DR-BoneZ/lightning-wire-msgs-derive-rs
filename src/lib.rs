@@ -214,6 +214,7 @@ fn impl_wire_message_struct(
         field_tup.into_iter().unzip();
     let field_ty = field_ty_set.iter();
     let field_ty2 = field_ty_set.iter();
+    let field_ty3 = field_ty_set.iter();
     let field_ty_name =
         (0..(field_ty_set.len())).map(|i| syn::Ident::new(&format!("T{}", i), Span::call_site()));
     let field_ty_name2 = field_ty_name.clone();
@@ -252,7 +253,7 @@ fn impl_wire_message_struct(
                 fn encode<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<usize> {
                     match self {
                         #(
-                            #item::#field_ty_name3(a) => <a as lightning_wire_msgs::WireItem>::encode(a, w),
+                            #item::#field_ty_name3(a) => <#field_ty3 as lightning_wire_msgs::WireItem>::encode(a, w),
                         )*
                     }
                 }
