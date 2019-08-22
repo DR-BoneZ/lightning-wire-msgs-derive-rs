@@ -58,7 +58,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
             fn msg_type(&self) -> u16 {
                 match self {
                     #(
-                        #name::#variant_name(a) => #variant_type::MSG_TYPE,
+                        #name::#variant_name(a) => <#variant_type as lightning_wire_msgs::WireMessage>::MSG_TYPE,
                     )*
                 }
             }
@@ -77,7 +77,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
                 let msg_type = u16::from_be_bytes(msg_type);
                 Ok(match msg_type {
                     #(
-                        #variant_type::MSG_TYPE => #name::#variant_name(#variant_type::read_from(r, false)?),
+                        <#variant_type as lightning_wire_msgs::WireMessage>::MSG_TYPE => #name::#variant_name(#variant_type::read_from(r, false)?),
                     )*
                     _ => return Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
                 })
