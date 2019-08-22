@@ -219,7 +219,6 @@ fn impl_wire_message_struct(
         (0..(field_ty_set.len())).map(|i| syn::Ident::new(&format!("T{}", i), Span::call_site()));
     let field_ty_name2 = field_ty_name.clone();
     let field_ty_name3 = field_ty_name.clone();
-    let field_ty_name4 = field_ty_name.clone();
     let gen = if field.is_empty() {
         quote! {
             impl<'a> IntoIterator for &'a #name {
