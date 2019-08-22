@@ -250,9 +250,10 @@ fn impl_wire_message_struct(
             )*
             impl<'a> lightning_wire_msgs::WireItemWriter for #item<'a> {
                 fn encode<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<usize> {
+                    use lightning_wire_msgs::WireItem;
                     match self {
                         #(
-                            #item::#field_ty_name3(a) => lightning_wire_msgs::WireItem::encode(a, w),
+                            #item::#field_ty_name3(a) => a.encode(w),
                         )*
                     }
                 }
