@@ -74,35 +74,65 @@ fn impl_any_wire_message_enum(
             a => a.clone(),
         })
         .collect();
-    // let generics_with_where_bounds = {
-    //     let mut generics = generics.clone();
-    //     let mut where_clause = syn::WhereClause {
-    //         where_token: generics.where_clause.map(|w| w.where_token).unwrap_or_else(|| syn::Where {
-    //             span: proc_macro2::Span::call_site(),
-    //         }),
-    //         predicates: syn::punctuated::Punctuated::new(),
-    //     };
-    //     for bound in generics.params.iter().filter_map(|gparam| match gparam {
-    //         syn::GenericParam::Type::(tp) => {
+    let generics_stripped = {
+        let mut generics = generics.clone();
+        generics.params = syn::punctuated::Punctuated::new();
+        for param in type_params.iter() {
+            generics.params.push(param.clone());
+        }
+        generics.where_clause = None;
 
-    //         }
-    //     }) {
-
-    //     }
-    //     generics.params = syn::punctuated::Punctuated::new();
-    //     for param in type_params.iter() {
-    //         generics.params.push(param.clone());
-    //     }
-    //     generics.where_clause = if where_clause.predicates.is_empty() {
-    //         None
-    //     } else {
-    //         Some(where_clause)
-    //     };
-
-    //     generics
-    // };
+        generics
+    };
+    let generics_params = &generics.params;
+    let generics_where_clause = {
+        let mut w = generics
+            .where_clause
+            .clone()
+            .unwrap_or_else(|| syn::WhereClause {
+                where_token: syn::token::Where {
+                    span: Span::call_site(),
+                },
+                predicates: syn::punctuated::Punctuated::new(),
+            });
+        for tp in type_params.iter() {
+            match tp {
+                syn::GenericParam::Type(tp) => {
+                    w.predicates
+                        .push(syn::WherePredicate::Type(syn::PredicateType {
+                            lifetimes: None,
+                            bounded_ty: syn::TypePath {
+                                qself: None,
+                                path: syn::Path {
+                                    leading_colon: None,
+                                    segments: {
+                                        let mut seg = syn::punctuated::Punctuated::new();
+                                        seg.push(syn::PathSegment {
+                                            ident: tp.ident.clone(),
+                                            arguments: syn::PathArguments::None,
+                                        });
+                                        seg
+                                    },
+                                },
+                            }
+                            .into(),
+                            colon_token: syn::token::Colon {
+                                spans: [Span::call_site()],
+                            },
+                            bounds: {
+                                let mut bounds = syn::punctuated::Punctuated::new();
+                                bounds.push(syn::Lifetime::new("'awm", Span::call_site()).into());
+                                bounds
+                            },
+                        }))
+                }
+                _ => (),
+            }
+        }
+        w
+    };
     let gen = quote! {
-        impl<'awm#(, #type_params)*> lightning_wire_msgs::AnyWireMessage<'awm> for #name#generics_with_where_bounds {
+        impl<'awm, #generics_params> lightning_wire_msgs::AnyWireMessage<'awm> for #name#generics_stripped #generics_where_clause {
             fn msg_type(&self) -> u16 {
                 match self {
                     #(
@@ -111,7 +141,7 @@ fn impl_any_wire_message_enum(
                 }
             }
 
-            fn write_to<W: std::io::Write>(&'a self, w: &mut W) -> std::io::Result<usize> {
+            fn write_to<W: std::io::Write>(&'awm self, w: &mut W) -> std::io::Result<usize> {
                 match self {
                     #(
                         #name::#variant_name(a) => lightning_wire_msgs::WireMessage::write_to(a, w),
@@ -248,17 +278,20 @@ fn impl_wire_message_struct(
         .enumerate()
         .map(field_mapper)
         .unzip();
-    let wire_item_read_expr: Vec<_> = tlv_type.iter().map(|t| {
-        if let Some(t) = t {
-            quote! {
-                lightning_wire_msgs::WireItem::read_from(&mut peek_reader, Some(#t))?
+    let wire_item_read_expr: Vec<_> = tlv_type
+        .iter()
+        .map(|t| {
+            if let Some(t) = t {
+                quote! {
+                    lightning_wire_msgs::TLVWireItem::read_from(&mut peek_reader, #t)?
+                }
+            } else {
+                quote! {
+                    lightning_wire_msgs::WireItem::decode(&mut peek_reader)?
+                }
             }
-        } else {
-            quote! {
-                lightning_wire_msgs::WireItem::read_from(&mut peek_reader, None)?.ok_or(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?
-            }
-        }
-    }).collect();
+        })
+        .collect();
     let (field, field_ty_set): (Vec<syn::Member>, HashSet<syn::Type>) =
         field_tup.into_iter().unzip();
     let field_ty = field_ty_set.iter();
@@ -268,16 +301,91 @@ fn impl_wire_message_struct(
         (0..(field_ty_set.len())).map(|i| syn::Ident::new(&format!("T{}", i), Span::call_site()));
     let field_ty_name2 = field_ty_name.clone();
     let field_ty_name3 = field_ty_name.clone();
+
+    let type_params: Vec<syn::GenericParam> = generics
+        .params
+        .iter()
+        .map(|gparam| match gparam {
+            syn::GenericParam::Type(tp) => {
+                let mut tp = tp.clone();
+                tp.bounds = syn::punctuated::Punctuated::new();
+                syn::GenericParam::Type(tp)
+            }
+            syn::GenericParam::Lifetime(ltp) => {
+                let mut ltp = ltp.clone();
+                ltp.bounds = syn::punctuated::Punctuated::new();
+                syn::GenericParam::Lifetime(ltp)
+            }
+            a => a.clone(),
+        })
+        .collect();
+    let generics_stripped = {
+        let mut generics = generics.clone();
+        generics.params = syn::punctuated::Punctuated::new();
+        for param in type_params.iter() {
+            generics.params.push(param.clone());
+        }
+        generics.where_clause = None;
+        generics
+    };
+    let generics_params = &generics.params;
+    let generics_where_clause = {
+        let mut w = generics
+            .where_clause
+            .clone()
+            .unwrap_or_else(|| syn::WhereClause {
+                where_token: syn::token::Where {
+                    span: Span::call_site(),
+                },
+                predicates: syn::punctuated::Punctuated::new(),
+            });
+        for tp in type_params.iter() {
+            match tp {
+                syn::GenericParam::Type(tp) => {
+                    w.predicates
+                        .push(syn::WherePredicate::Type(syn::PredicateType {
+                            lifetimes: None,
+                            bounded_ty: syn::TypePath {
+                                qself: None,
+                                path: syn::Path {
+                                    leading_colon: None,
+                                    segments: {
+                                        let mut seg = syn::punctuated::Punctuated::new();
+                                        seg.push(syn::PathSegment {
+                                            ident: tp.ident.clone(),
+                                            arguments: syn::PathArguments::None,
+                                        });
+                                        seg
+                                    },
+                                },
+                            }
+                            .into(),
+                            colon_token: syn::token::Colon {
+                                spans: [Span::call_site()],
+                            },
+                            bounds: {
+                                let mut bounds = syn::punctuated::Punctuated::new();
+                                bounds.push(syn::Lifetime::new("'wm", Span::call_site()).into());
+                                bounds
+                            },
+                        }))
+                }
+                _ => (),
+            }
+        }
+        w
+    };
+    let generics_stripped_params = &generics_stripped.params;
     let gen = if field.is_empty() {
         quote! {
-            impl<'a> IntoIterator for &'a #name {
-                type Item = !;
+            impl<'wm, #generics_params> IntoIterator for &'wm #name#generics_stripped #generics_where_clause {
+                type Item = ();
                 type IntoIter = std::iter::Empty;
-                fn into_iter(self) -> std::iter::Empty<!> {
+                fn into_iter(self) -> std::iter::Empty<()> {
                     std::iter::empty()
                 }
             }
-            impl lightning_wire_msgs::WireMessage<'_> for #name {
+            impl<'wm, #generics_params> lightning_wire_msgs::WireMessage<'wm> for #name#generics_stripped #generics_where_clause {
                 fn msg_type(&self) -> u16 {
                     #num
                 }
@@ -285,34 +393,34 @@ fn impl_wire_message_struct(
         }
     } else {
         quote! {
-            pub enum #item<'a> {
+            pub enum #item<'wm, #generics_params> #generics_where_clause {
                 #(
-                    #field_ty_name(&'a #field_ty),
+                    #field_ty_name(&'wm #field_ty),
                 )*
             }
             #(
-                impl<'a> From<&'a #field_ty2> for #item<'a> {
-                    fn from(t: &'a #field_ty2) -> Self {
+                impl<'wm, #generics_params> From<&'wm #field_ty2> for #item<'wm, #generics_stripped_params> #generics_where_clause {
+                    fn from(t: &'wm #field_ty2) -> Self {
                         #item::#field_ty_name2(t)
                     }
                 }
             )*
-            impl<'a> lightning_wire_msgs::WireItemWriter for #item<'a> {
+            impl<'wm, #generics_params> lightning_wire_msgs::WireItemWriter for #item<'wm, #generics_stripped_params> #generics_where_clause {
                 fn encode<W: std::io::Write>(&self, w: &mut W) -> std::io::Result<usize> {
                     match self {
                         #(
-                            #item::#field_ty_name3(a) => <#field_ty3 as lightning_wire_msgs::WireItem>::encode(a, w),
+                            #item::#field_ty_name3(a) => <#field_ty3 as lightning_wire_msgs::WireItemWriter>::encode(a, w),
                         )*
                     }
                 }
             }
 
-            pub struct #iter<'a> {
+            pub struct #iter<'wm, #generics_params> {
                 idx: usize,
-                parent: &'a #name,
+                parent: &'wm #name#generics_stripped,
             }
-            impl<'a> Iterator for #iter<'a> {
-                type Item = lightning_wire_msgs::EncodedItem<#item<'a>>;
+            impl<'wm, #generics_params> Iterator for #iter<'wm, #generics_stripped_params> #generics_where_clause {
+                type Item = lightning_wire_msgs::EncodedItem<#item<'wm, #generics_stripped_params>>;
 
                 fn next(&mut self) -> Option<Self::Item> {
                     let n = self.idx;
@@ -326,18 +434,18 @@ fn impl_wire_message_struct(
                 }
             }
 
-            impl<'a> IntoIterator for &'a #name {
-                type Item = <#iter<'a> as Iterator>::Item;
-                type IntoIter = #iter<'a>;
-                fn into_iter(self) -> #iter<'a> {
+            impl<'wm, #generics_params> IntoIterator for &'wm #name#generics_stripped #generics_where_clause {
+                type Item = <#iter<'wm, #generics_stripped_params> as Iterator>::Item;
+                type IntoIter = #iter<'wm, #generics_stripped_params>;
+                fn into_iter(self) -> #iter<'wm, #generics_stripped_params> {
                     #iter {
                         idx: 0,
                         parent: self,
                     }
                 }
             }
-            impl<'a> lightning_wire_msgs::WireMessage<'a> for #name {
-                type Item = #item<'a>;
+            impl<'wm, #generics_params> lightning_wire_msgs::WireMessage<'wm> for #name#generics_stripped #generics_where_clause {
+                type Item = #item<'wm, #generics_stripped_params>;
 
                 const MSG_TYPE: u16 = #num;
 
