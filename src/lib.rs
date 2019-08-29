@@ -6,6 +6,16 @@ use quote::quote;
 use std::collections::HashSet;
 use syn;
 
+#[proc_macro_derive(TryFromPrimitive, attributes(repr))]
+pub fn try_from_derive(input: TokenStream) -> TokenStream {
+    // Construct a representation of Rust code as a syntax tree
+    // that we can manipulate
+    let ast = syn::parse(input).unwrap();
+
+    // Build the trait implementation
+    impl_try_from(&ast)
+}
+
 #[proc_macro_derive(AnyWireMessage)]
 pub fn any_wire_message_derive(input: TokenStream) -> TokenStream {
     // Construct a representation of Rust code as a syntax tree
@@ -24,6 +34,51 @@ pub fn wire_message_derive(input: TokenStream) -> TokenStream {
 
     // Build the trait implementation
     impl_wire_message(&ast)
+}
+
+fn impl_try_from(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let data = if let syn::Data::Enum(ref data) = &ast.data {
+        data
+    } else {
+        panic!("only derivable for enums with discriminants")
+    };
+    let repr = ast
+        .attrs
+        .iter()
+        .filter_map(|attr| {
+            attr.parse_meta().ok().map(|meta| match meta {
+                syn::Meta::List(ref ml) if ml.path.is_ident("repr") => {
+                    Some(ml.nested.first().expect("invalid repr").clone())
+                }
+                _ => None,
+            })
+        })
+        .next()
+        .expect("missing repr");
+    let discriminant = data.variants.iter().map(|var| {
+        &var.discriminant
+            .as_ref()
+            .expect("only derivable for enums with discriminants")
+            .1
+    });
+    let variant = data.variants.iter().map(|var| &var.ident);
+
+    let gen = quote! {
+        impl std::convert::TryFrom<#repr> for #name {
+            type Error = ();
+
+            fn try_from(prim: #repr) -> Result<Self, ()> {
+                match prim {
+                    #(
+                        #discriminant => Ok(#name::#variant),
+                    )*
+                    _ => Err(())
+                }
+            }
+        }
+    };
+    gen.into()
 }
 
 fn impl_any_wire_message(ast: &syn::DeriveInput) -> TokenStream {
