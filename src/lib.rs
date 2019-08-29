@@ -29,12 +29,16 @@ pub fn wire_message_derive(input: TokenStream) -> TokenStream {
 fn impl_any_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     use syn::Data::*;
     match &ast.data {
-        Enum(ref s) => impl_any_wire_message_enum(&ast.ident, s),
+        Enum(ref s) => impl_any_wire_message_enum(&ast.ident, s, &ast.generics),
         _ => panic!("only derivable for enums"),
     }
 }
 
-fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> TokenStream {
+fn impl_any_wire_message_enum(
+    name: &syn::Ident,
+    enum_data: &syn::DataEnum,
+    generics: &syn::Generics,
+) -> TokenStream {
     let (variant_name, variant_type): (Vec<_>, Vec<_>) = enum_data
         .variants
         .iter()
@@ -53,8 +57,52 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
             )
         })
         .unzip();
+    let type_params: Vec<syn::GenericParam> = generics
+        .params
+        .iter()
+        .map(|gparam| match gparam {
+            syn::GenericParam::Type(tp) => {
+                let mut tp = tp.clone();
+                tp.bounds = syn::punctuated::Punctuated::new();
+                syn::GenericParam::Type(tp)
+            }
+            syn::GenericParam::Lifetime(ltp) => {
+                let mut ltp = ltp.clone();
+                ltp.bounds = syn::punctuated::Punctuated::new();
+                syn::GenericParam::Lifetime(ltp)
+            }
+            a => a.clone(),
+        })
+        .collect();
+    // let generics_with_where_bounds = {
+    //     let mut generics = generics.clone();
+    //     let mut where_clause = syn::WhereClause {
+    //         where_token: generics.where_clause.map(|w| w.where_token).unwrap_or_else(|| syn::Where {
+    //             span: proc_macro2::Span::call_site(),
+    //         }),
+    //         predicates: syn::punctuated::Punctuated::new(),
+    //     };
+    //     for bound in generics.params.iter().filter_map(|gparam| match gparam {
+    //         syn::GenericParam::Type::(tp) => {
+
+    //         }
+    //     }) {
+
+    //     }
+    //     generics.params = syn::punctuated::Punctuated::new();
+    //     for param in type_params.iter() {
+    //         generics.params.push(param.clone());
+    //     }
+    //     generics.where_clause = if where_clause.predicates.is_empty() {
+    //         None
+    //     } else {
+    //         Some(where_clause)
+    //     };
+
+    //     generics
+    // };
     let gen = quote! {
-        impl<'a> lightning_wire_msgs::AnyWireMessage<'a> for #name {
+        impl<'awm#(, #type_params)*> lightning_wire_msgs::AnyWireMessage<'awm> for #name#generics_with_where_bounds {
             fn msg_type(&self) -> u16 {
                 match self {
                     #(
@@ -90,7 +138,7 @@ fn impl_any_wire_message_enum(name: &syn::Ident, enum_data: &syn::DataEnum) -> T
 fn impl_wire_message(ast: &syn::DeriveInput) -> TokenStream {
     use syn::Data::*;
     match &ast.data {
-        Struct(ref s) => impl_wire_message_struct(&ast.ident, &ast.attrs, s),
+        Struct(ref s) => impl_wire_message_struct(&ast.ident, &ast.attrs, s, &ast.generics),
         _ => unimplemented!(),
     }
 }
@@ -99,6 +147,7 @@ fn impl_wire_message_struct(
     name: &syn::Ident,
     attrs: &Vec<syn::Attribute>,
     struct_data: &syn::DataStruct,
+    generics: &syn::Generics,
 ) -> TokenStream {
     let num = attrs
         .iter()
