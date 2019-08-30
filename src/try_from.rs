@@ -37,7 +37,7 @@ pub fn impl_trait(ast: &syn::DeriveInput) -> TokenStream {
         impl std::convert::TryFrom<#repr> for #name {
             type Error = #repr;
 
-            fn try_from(prim: #repr) -> Result<Self, ()> {
+            fn try_from(prim: #repr) -> Result<Self, Self::Error> {
                 #(
                     const #variant_const: #repr = #name::#variant as #repr;
                 )*
