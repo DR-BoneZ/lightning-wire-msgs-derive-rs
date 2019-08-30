@@ -1,6 +1,6 @@
 [package]
 name = "lightning-wire-msgs-derive"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Aiden McClelland <me@drbonez.dev>"]
 edition = "2018"
 description = "derive macros for defining serialization and deserialization of lightning wire messages"

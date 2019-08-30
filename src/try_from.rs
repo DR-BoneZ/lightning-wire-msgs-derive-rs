@@ -21,22 +21,29 @@ pub fn impl_trait(ast: &syn::DeriveInput) -> TokenStream {
         })
         .next()
         .expect("missing repr");
-    let discriminant = data.variants.iter().map(|var| {
-        &var.discriminant
-            .as_ref()
-            .expect("only derivable for enums with discriminants")
-            .1
-    });
-    let variant = data.variants.iter().map(|var| &var.ident);
+    let variant = data
+        .variants
+        .iter()
+        .map(|var| &var.ident)
+        .collect::<Vec<_>>();
+    let variant_const = data
+        .variants
+        .iter()
+        .enumerate()
+        .map(|(i, var)| syn::Ident::new(&format!("C{}", i), var.ident.span()))
+        .collect::<Vec<_>>();
 
     let gen = quote! {
         impl std::convert::TryFrom<#repr> for #name {
             type Error = ();
 
             fn try_from(prim: #repr) -> Result<Self, ()> {
+                #(
+                    const #variant_const: #repr = #name::#variant as #repr;
+                )*
                 match prim {
                     #(
-                        #discriminant => Ok(#name::#variant),
+                        #variant_const => Ok(#name::#variant),
                     )*
                     _ => Err(())
                 }
