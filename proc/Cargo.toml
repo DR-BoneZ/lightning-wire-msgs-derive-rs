@@ -1,0 +1,14 @@
+[package]
+name = "lightning-wire-msgs-derive"
+version = "0.2.4"
+authors = ["Aiden McClelland <me@drbonez.dev>"]
+edition = "2018"
+description = "derive macros for defining serialization and deserialization of lightning wire messages"
+license = "Apache-2.0"
+repository = "https://github.com/DR-BoneZ/lightning-wire-msgs-derive-rs"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+lightning-wire-msgs-derive-base = { path = "../base" }
