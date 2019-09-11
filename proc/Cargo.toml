@@ -11,4 +11,4 @@ repository = "https://github.com/DR-BoneZ/lightning-wire-msgs-derive-rs"
 proc-macro = true
 
 [dependencies]
-lightning-wire-msgs-derive-base = { path = "../base" }
+lightning-wire-msgs-derive-base = { path = "../base", version = "0.2.4" }
