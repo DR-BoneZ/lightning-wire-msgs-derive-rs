@@ -1,4 +1,4 @@
-use crate::proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::quote;
 
 pub fn impl_trait(ast: &syn::DeriveInput) -> TokenStream {

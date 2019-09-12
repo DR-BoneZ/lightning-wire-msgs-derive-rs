@@ -1,5 +1,5 @@
-use crate::proc_macro::TokenStream;
 use proc_macro2::Span;
+use proc_macro2::TokenStream;
 use quote::quote;
 
 enum Subset {
