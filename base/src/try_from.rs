@@ -12,7 +12,7 @@ pub fn impl_trait(ast: &syn::DeriveInput) -> TokenStream {
         .attrs
         .iter()
         .filter_map(|attr| {
-            attr.parse_meta().ok().map(|meta| match meta {
+            attr.parse_meta().ok().and_then(|meta| match meta {
                 syn::Meta::List(ref ml) if ml.path.is_ident("repr") => {
                     Some(ml.nested.first().expect("invalid repr").clone())
                 }

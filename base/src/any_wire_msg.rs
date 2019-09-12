@@ -124,7 +124,7 @@ fn impl_trait_enum(
                 fn msg_type(&self) -> u16 {
                     match self {
                         #(
-                            #name::#variant_name(a) => <#variant_type as lightning_wire_msgs::WireMessage>::MSG_TYPE,
+                            #name::#variant_name(_) => <#variant_type as lightning_wire_msgs::WireMessage>::MSG_TYPE,
                         )*
                     }
                 }
@@ -137,7 +137,7 @@ fn impl_trait_enum(
                 fn msg_type(&self) -> u16 {
                     match self {
                         #(
-                            #name::#variant_name(a) => <#variant_type as lightning_wire_msgs::WireMessageWriter>::MSG_TYPE,
+                            #name::#variant_name(_) => <#variant_type as lightning_wire_msgs::WireMessageWriter>::MSG_TYPE,
                         )*
                     }
                 }
@@ -149,7 +149,7 @@ fn impl_trait_enum(
                 fn msg_type(&self) -> u16 {
                     match self {
                         #(
-                            #name::#variant_name(a) => <#variant_type as lightning_wire_msgs::WireMessageReader>::MSG_TYPE,
+                            #name::#variant_name(_) => <#variant_type as lightning_wire_msgs::WireMessageReader>::MSG_TYPE,
                         )*
                     }
                 }
